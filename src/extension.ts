@@ -73,14 +73,14 @@ class TypeScriptCompiler {
 
                 var filename = window.activeTextEditor.document.fileName;
 
-                self.output.show();
-                self.output.appendLine("Auto compiling file \'" + filename + "\'");
+                var status = "Auto compiling file \'" + filename + "\'";
+                window.setStatusBarMessage(status, 5000);
+                self.output.appendLine(status);
 
                 var command = "tsc.exe " + filename;
 
                 if (self.tsconfig) {
                     command = "tsc.exe -p \"" + self.tsconfig + "\"";
-                    self.output.show();
                     self.output.appendLine("Using tsconfig.json at \'" + self.tsconfig + "\'");                    
                 }
 
@@ -93,11 +93,15 @@ class TypeScriptCompiler {
                     if (error) {
                         self.output.show();
                         self.output.appendLine(error.message);
-                        self.output.appendLine(stdout.toString());
+                        self.output.appendLine(stdout.trim().toString());
                         self.output.appendLine('');
+
+                        window.setStatusBarMessage(error.message, 5000);
                     } else {
-                        self.output.show();
-                        self.output.appendLine('Compilation succedded.');
+                        var successMsg = 'TypeScript Auto Compilation succedded.';
+
+                        window.setStatusBarMessage(successMsg, 5000);
+                        self.output.appendLine(successMsg);
                         self.output.appendLine('');
                     }
                 });

@@ -1,14 +1,14 @@
 # Typescript Auto Compiler
 ## Visual Studio Code Extension
 
-This is a TypeScript extension designed to auto build when any opened .ts config file changes.
+This is a TypeScript extension designed to build automatically any opened .ts on file changes.
 
 > Important Note: this extension still is in BETA build and may not work properly in specific scenarios
 Fill free to report any bugs and features in [GitHub Extension Repository](https://github.com/morissonmaciel/vscode-tsc-compiler). 
 
 ## Features
 
-* Build automaticly `.ts` TypeScripts files changed in editor
+* Build automatically `.ts` TypeScripts files changed in editor
 * Detect any `tsconfig.json` definition file in current workspace
 
 > Note: the extension can detect only the first `tsconfig.json` file in the first `workspace`. Support for mutiple folders workspace coming soon.
