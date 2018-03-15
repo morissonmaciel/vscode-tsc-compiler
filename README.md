@@ -11,7 +11,7 @@ Fill free to report any bugs and features in [GitHub Extension Repository](https
 * Build automatically `.ts` TypeScripts files changed in editor
 * Detect any `tsconfig.json` definition file in current workspace
 
-> Note: the extension can detect only the first `tsconfig.json` file in the first `workspace`. Support for mutiple folders workspace coming soon.
+> Note: the extension can detect only the first `tsconfig.json` file in the first `workspace`. Support for multiple folders workspace coming soon.
 
 ## Requirements
 
@@ -27,7 +27,7 @@ No specific settings are necessary to configure the extension.
 
 ## Known Issues
 
-The only known issue is the extension uncabability in detect more then one `tsconfig.json` files and mutiples folders in `workspace`. Support for mutiple folders workspace coming soon.
+The only known issue: the extension is unable to detect more then one `tsconfig.json` files and multiples folders in `workspace`. Support for multiple folders workspace is coming soon.
 
 ## Release Notes
 
@@ -37,8 +37,13 @@ The only known issue is the extension uncabability in detect more then one `tsco
 ** Single `tsconfig.json` file
 ** Multiples `.ts` files
 
-### 1.0.0
+### 0.5.1
 
 Initial release of vscode-tsc-compiler
+
+### 0.5.1
+
+Non-obtrusive console messages when compilation succeeded
+
 
 -----------------------------------------------------------------------------------------------------------
