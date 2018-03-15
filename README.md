@@ -41,9 +41,12 @@ The only known issue: the extension is unable to detect more then one `tsconfig.
 
 Initial release of vscode-tsc-compiler
 
-### 0.5.1
+### 0.5.2
 
 Non-obtrusive console messages when compilation succeeded
 
+### 0.5.3
+
+Adjustments in README.md published in Visual Studio Code Extension Gallery.
 
 -----------------------------------------------------------------------------------------------------------
