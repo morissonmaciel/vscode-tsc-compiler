@@ -15,7 +15,11 @@ Fill free to report any bugs and features in [GitHub Extension Repository](https
 
 ## Requirements
 
-No requiriments are necessary to run the extension.
+External TypeScript compiler (aka tsc.exe) must be installed to work properly.
+
+You can download the compiler in [TypeScript Lang Download page](https://www.typescriptlang.org/index.html#download-links)
+
+> Note: be sure that TypeScript installation folder is set in `PATH` variable.
 
 ## Extension Settings
 

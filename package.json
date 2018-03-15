@@ -26,5 +26,9 @@
         "vscode": "^1.1.6",
         "@types/node": "^7.0.43",
         "@types/mocha": "^2.2.42"
+    },
+    "repository": {
+        "type": "GitHub",
+        "url": "https://github.com/morissonmaciel/vscode-tsc-compiler"
     }
 }
