@@ -77,10 +77,10 @@ class TypeScriptCompiler {
                 window.setStatusBarMessage(status, 5000);
                 self.output.appendLine(status);
 
-                var command = "tsc.exe " + filename;
+                var command = "tsc " + filename;
 
                 if (self.tsconfig) {
-                    command = "tsc.exe -p \"" + self.tsconfig + "\"";
+                    command = "tsc -p \"" + self.tsconfig + "\"";
                     self.output.appendLine("Using tsconfig.json at \'" + self.tsconfig + "\'");                    
                 }
 
