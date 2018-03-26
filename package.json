@@ -12,7 +12,8 @@
     ],
     "main": "./out/extension",
     "activationEvents" : [
-        "onLanguage:typescript"
+        "workspaceContains:**/*.ts",
+        "workspaceContains:**/tsconfig.json"
     ],
     "scripts": {
         "vscode:prepublish": "npm run compile",
