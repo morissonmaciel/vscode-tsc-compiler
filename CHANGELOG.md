@@ -9,4 +9,4 @@ Some improvements in file detection:
 * `tsconfig.json` creation and deletion events updates build mode for workspace
 * Changes in the normal plugin color in status bar (white everytime and changes only when events are ocurring)
 
-More plataform agnostic with `.exe` (Windows Executable) dependency remotion ~ Thanks to @daslicht!
+More plataform agnostic with `.exe` (Windows Executable) dependency remotion ~ Thanks to [@daslicht](https://github.com/morissonmaciel/vscode-tsc-compiler/commits?author=daslicht)!
