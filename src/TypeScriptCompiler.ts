@@ -1,33 +1,52 @@
-import { TaskDefinition, window, commands, Disposable, ExtensionContext, StatusBarAlignment, StatusBarItem, TextDocument, workspace, OutputChannel, ShellExecution, Task, TaskScope, Terminal, FileSystemWatcher } from 'vscode';
+import { TaskDefinition, window, commands, Disposable, ExtensionContext, StatusBarAlignment, StatusBarItem, TextDocument, workspace, OutputChannel, ShellExecution, Task, TaskScope, Terminal, FileSystemWatcher, RelativePattern } from 'vscode';
 import * as ChildProcess from 'child_process';
 import * as Path from 'path';
 
 class TypeScriptCompilerFileWatcher {
     private filename: string;
+    private pattern: RelativePattern;
     private watcher: FileSystemWatcher;
     private eventType: string;
 
-    public constructor(file: string) {
-        this.filename = Path.normalize(file);
+    private constructor() {
     }
 
     public watch(fn: Function) {
         var self = this;
 
-        if (!self.watcher) self.watcher = workspace.createFileSystemWatcher(self.filename, true, false, false);
+        if (self.filename) self.watcher = workspace.createFileSystemWatcher(self.filename);
+        else if (self.pattern) self.watcher = workspace.createFileSystemWatcher(self.pattern);
 
+        self.watcher.onDidCreate(function (event) {
+            self.eventType = 'created';
+            if (fn) fn({ filename: event.fsPath, eventType: self.eventType });
+        });
         self.watcher.onDidChange(function (event) {
             self.eventType = 'changed';
-            if (fn) fn({ filename: self.filename, eventType: self.eventType });
+            if (fn) fn({ filename: event.fsPath, eventType: self.eventType });
         });
         self.watcher.onDidDelete(function (event) {
             self.eventType = 'deleted';
-            if (fn) fn({ filename: self.filename, eventType: self.eventType });
+            if (fn) fn({ filename: event.fsPath, eventType: self.eventType });
         })
     }
 
     public dispose() {
         this.watcher.dispose();
+    }
+
+    public static fromFile(file: string): TypeScriptCompilerFileWatcher {
+        var tfw = new TypeScriptCompilerFileWatcher();
+        tfw.filename = Path.normalize(file);
+
+        return tfw;
+    }
+
+    public static FromPattern(pattern: RelativePattern): TypeScriptCompilerFileWatcher {
+        var tfw = new TypeScriptCompilerFileWatcher();
+        tfw.pattern = pattern;
+
+        return tfw;
     }
 }
 
@@ -65,45 +84,31 @@ class TypeScriptCompiler {
 
         if (!self.output) self.output = window.createOutputChannel("TypeScript Auto Compiler");
 
-        workspace.findFiles('**/*.ts').then(files => {
-            if (!files || files.length == 0) return;
-
-            [].forEach.call(files, file => {
-                var tsFile = file.fsPath;
-
-                self.watchers[tsFile] = new TypeScriptCompilerFileWatcher(tsFile);
-                self.watchers[tsFile].watch(e => {
-                    if (e.eventType == 'changed') self.compile(tsFile)
-                })
-            });
-        });
-
         workspace.findFiles('**/tsconfig.json').then((files) => {
             if (!files || files.length == 0) return;
-
-            var tsfile = files[0].fsPath;
-
-            self.watchers[tsfile] = new TypeScriptCompilerFileWatcher(tsfile);
-            self.watchers[tsfile].watch(e => {
-                if (e.eventType == 'changed') self.compile(tsfile)
-            })
-            self.tsconfig = tsfile;
-
-            window.showInformationMessage('Found tsconfig.json file at \'' + files[0].path + '\'. File will be used for TypeScript Auto Compile routines. ', 'Dismiss');
+            self.setTsConfigFile(files[0].fsPath);
         })
 
-        // workspace.onDidChangeTextDocument(e => {
-        //     var filename = Path.basename(e.document.fileName).toLowerCase();
-        //     var ext = Path.extname(e.document.fileName).toLowerCase();
+        {
+            let pattern = new RelativePattern(workspace.workspaceFolders[0], '**/*.ts');
+            let watcher = TypeScriptCompilerFileWatcher.FromPattern(pattern);
+            watcher.watch(e => {
+                if (e.filename) self.compile(e.filename)
+            });
+            self.watchers[pattern.pattern] = watcher;
+        }
 
-        //     if (ext == '.ts' || filename == 'tsconfig.json') {
-        //         self.statusChannel.updateStatus('$(history) TS [ON]',
-        //             'TypeScript Auto Compiler is ON - File changed! Wainting for save command.', 'white')
-        //     }
-        // }, self);
-        // workspace.onDidSaveTextDocument(e => {
-        //     self.compile(e.fileName);
-        // }, self);
+        {
+            let pattern = new RelativePattern(workspace.workspaceFolders[0], '**/tsconfig.json');
+            let watcher = TypeScriptCompilerFileWatcher.FromPattern(pattern);
+            watcher.watch(e => {
+                if (e.eventType == 'created') self.setTsConfigFile(e.filename);
+                else if (e.eventType == 'deleted') self.setTsConfigFile(null);
+
+                if (e.eventType == 'changed') self.compile(e.filename)
+            });
+            self.watchers[pattern.pattern] = watcher;
+        }
 
         self.statusChannel.updateStatus('$(eye) TS [ON]',
             'TypeScript Auto Compiler is ON - Watching file changes.', 'white');
@@ -116,6 +121,19 @@ class TypeScriptCompiler {
         [].forEach.call(this.watchers, watch => {
             watch.dispose();
         });
+    }
+
+    private setTsConfigFile(filename?: string) {
+        var msg: string;
+
+        if (filename) {
+            this.tsconfig = filename;
+            msg = 'Found tsconfig.json file at \'' + this.tsconfig + '\'. File will be used for TypeScript Auto Compile routines.';
+        } else {
+            this.tsconfig = null;
+            msg = 'Previous tsconfig.json file at \'' + this.tsconfig + '\' was removed. Building each \'.ts\' file.';
+        }
+        window.showInformationMessage(msg, 'Dismiss');
     }
 
     private compile(fspath: string) {
