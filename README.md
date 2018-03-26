@@ -31,35 +31,30 @@ The only known issue: the extension is unable to detect more then one `tsconfig.
 
 ## Release Notes
 
-* BETA features available are working properly for common scenarios. 
-** Single workspace
-** Single folder workspace
-** Single `tsconfig.json` file
-** Multiples `.ts` files
+BETA features available are working properly for common scenarios:
+* Single workspace
+* Single folder workspace
+* Single `tsconfig.json` file
+* Multiples `.ts` files
 
-### 0.5.1
+### 0.5.5
 
-Initial release of vscode-tsc-compiler
+Some improvements in file detection:
+
+* Activation by `*.ts` and `tsconfig.json` file events in workspace
+* Changes in `*.ts` and `tsconfig.json` files fire new builds
+* `tsconfig.json` creation and deletion events updates build mode for workspace
+* Changes in the normal plugin color in status bar (white everytime and changes only when events are ocurring)
+
+More plataform agnostic with `.exe` (Windows Executable) dependency remotion ~ Thanks to @daslicht!
 
 ### 0.5.2
 
 Non-obtrusive console messages when compilation succeeded
 
-### 0.5.3
+### 0.5.1
 
-Adjustments in README.md published in Visual Studio Code Extension Gallery.
-
-### 0.5.5
-
-Some improvments in file detection:
-
--- Activation by `*.ts` and `tsconfig.json` file events in workspace
-
--- Changes in `*.ts` and `tsconfig.json` files fire new builds
-
--- `tsconfig.json` creation and deletion events updates build mode for workspace
-
--- Changes in the normal plugin color in status bar (white everytime and changes only when events are ocurring)
-
+Initial release of vscode-tsc-compiler
+ 
 
 -----------------------------------------------------------------------------------------------------------
