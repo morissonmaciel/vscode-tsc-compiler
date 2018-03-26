@@ -1,9 +1,20 @@
 {
     "name": "typescript-auto-compiler",
-    "displayName": "TypeScript Auto Compiler [BETA]",
-    "description": "TypeScript auto compiler plugin [BETA]. Watch for changes in .ts files and run tsc command to build them. Can use tsconfig.json files for batch build or build single .ts archives.",
-    "version": "0.5.3",
+    "displayName": "TypeScript Auto Compiler",
+    "description": "TypeScript auto compiler plugin. Watch for changes in .ts and tsconfig.json files and run tsc command to build them. Can use tsconfig.json files for batch build or build single .ts archives.",
+    "version": "0.5.5",
     "publisher": "morissonmaciel",
+    "contributors": [
+        "@morissonmaciel",
+        "@daslicht"
+    ],
+    "keywords": [
+        "tsc",
+        "typescript",
+        "auto",
+        "compiler"
+    ],
+    "preview": true,
     "engines": {
         "vscode": "^1.21.0"
     },
