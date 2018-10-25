@@ -26,6 +26,19 @@
         "workspaceContains:**/*.ts",
         "workspaceContains:**/tsconfig.json"
     ],
+    "contributes": {
+        "configuration": {
+            "type": "object",
+            "title": "Typescript Autocompiler Extension configuration",
+            "properties": {
+                "vscode.tsc.compiler.alertOnError": {
+                    "type": "string",
+                    "default": "always",
+                    "description": "Controls when an alert for compiling errors should be display for user. Values: ['always', 'never']"
+                }
+            }
+        }
+    },
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",

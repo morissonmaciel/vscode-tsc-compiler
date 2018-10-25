@@ -1,4 +1,23 @@
-import { TaskDefinition, window, commands, Disposable, ExtensionContext, StatusBarAlignment, StatusBarItem, TextDocument, workspace, OutputChannel, ShellExecution, Task, TaskScope, Terminal, FileSystemWatcher, RelativePattern } from 'vscode';
+import {
+    TaskDefinition,
+    window,
+    commands,
+    Disposable,
+    ExtensionContext,
+    StatusBarAlignment,
+    StatusBarItem,
+    TextDocument,
+    workspace,
+    OutputChannel,
+    ShellExecution,
+    Task,
+    TaskScope,
+    Terminal,
+    FileSystemWatcher,
+    RelativePattern,
+    WorkspaceConfiguration,
+    ConfigurationTarget
+} from 'vscode';
 import * as ChildProcess from 'child_process';
 import * as Path from 'path';
 
@@ -75,6 +94,9 @@ class TypeScriptCompiler {
     private statusChannel: TypeScriptCompilerStatusChannel;
     private output: OutputChannel;
     private tsconfig: string;
+    private configurations = {
+        alertOnError: 'alertOnError'
+    }
 
     public constructor() {
         var self = this;
@@ -121,6 +143,17 @@ class TypeScriptCompiler {
         [].forEach.call(this.watchers, watch => {
             watch.dispose();
         });
+    }
+
+    private readConfiguration(key, defaultValue?: string): string {
+        // Reading existing configurations for extensions
+        var configurationNode = workspace.getConfiguration(`vscode.tsc.compiler`);
+        return configurationNode.get(key, defaultValue);
+    }
+
+    private setConfiguration(key, value) {
+        var configurationNode = workspace.getConfiguration(`vscode.tsc.compiler`);
+        return configurationNode.update(key, value, ConfigurationTarget.Workspace);
     }
 
     private setTsConfigFile(filename?: string) {
@@ -222,10 +255,23 @@ class TypeScriptCompiler {
                             'TypeScript Auto Compiler is ON - Watching file changes.', 'white');
 
                         if (error) {
-                            self.output.show();
+                            // self.output.show();
                             self.output.appendLine(error.message);
                             self.output.appendLine(stdout.trim().toString());
                             self.output.appendLine('');
+
+                            const showError = this.readConfiguration(self.configurations.alertOnError, 'always');
+                            showError === 'always' ?
+                                window.showInformationMessage(
+                                    `Compile errors ocurred while building .ts files.`,
+                                    'Dismiss', 'Show output', 'Never show again')
+                                    .then(opted => {
+                                        if (opted === 'Show output') self.output.show();
+                                        else if (opted === 'Never show again') {
+                                            this.setConfiguration(self.configurations.alertOnError, 'never');
+                                        }
+                                    })
+                                : console.log(`Not showing error informational message`)
 
                             window.setStatusBarMessage(error.message, 5000);
                         } else {
@@ -239,7 +285,7 @@ class TypeScriptCompiler {
                 })
                 .catch(error => {
                     self.statusChannel.updateStatus('$(alert) TS [ON]',
-                            'TypeScript Auto Compiler encountered an errror.', 'tomato');
+                        'TypeScript Auto Compiler encountered an errror.', 'tomato');
                     window.showInformationMessage(error, 'Dismiss')
                 })
         }
