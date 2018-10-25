@@ -35,6 +35,11 @@
                     "type": "string",
                     "default": "always",
                     "description": "Controls when an alert for compiling errors should be display for user. Values: ['always', 'never']"
+                },
+                "vscode.tsc.compiler.alertTSConfigChanges": {
+                    "type": "string",
+                    "default": "always",
+                    "description": "Controls when an alert should be display for user when tsconfig.json file is found/removed from extension watcher. Values: ['always', 'never']"
                 }
             }
         }

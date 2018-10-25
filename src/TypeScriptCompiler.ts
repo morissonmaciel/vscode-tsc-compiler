@@ -20,6 +20,7 @@ import {
 } from 'vscode';
 import * as ChildProcess from 'child_process';
 import * as Path from 'path';
+import * as Fs from 'fs';
 
 class TypeScriptCompilerFileWatcher {
     private filename: string;
@@ -94,8 +95,10 @@ class TypeScriptCompiler {
     private statusChannel: TypeScriptCompilerStatusChannel;
     private output: OutputChannel;
     private tsconfig: string;
+    private tsconfigCompileOnSave: boolean = true;
     private configurations = {
-        alertOnError: 'alertOnError'
+        alertOnError: 'alertOnError',
+        alertTSConfigChanges: 'alertTSConfigChanges'
     }
 
     public constructor() {
@@ -127,7 +130,10 @@ class TypeScriptCompiler {
                 if (e.eventType == 'created') self.setTsConfigFile(e.filename);
                 else if (e.eventType == 'deleted') self.setTsConfigFile(null);
 
-                if (e.eventType == 'changed') self.compile(e.filename)
+                if (e.eventType == 'changed') {
+                    self.updatesTsConfigBuildOnSaveOptions();
+                    self.compile(e.filename);
+                } 
             });
             self.watchers[pattern.pattern] = watcher;
         }
@@ -156,8 +162,23 @@ class TypeScriptCompiler {
         return configurationNode.update(key, value, ConfigurationTarget.Workspace);
     }
 
+    private updatesTsConfigBuildOnSaveOptions() {
+        if (this.tsconfig != null) {
+            const contents = Fs.readFileSync(this.tsconfig).toString();
+            const configs = JSON.parse(contents);
+            
+            if (configs && configs.compileOnSave != null) {
+                this.tsconfigCompileOnSave = configs.compileOnSave as boolean;
+            }
+        } else {
+            this.tsconfigCompileOnSave = true;
+        }
+    }
+
     private setTsConfigFile(filename?: string) {
         var msg: string;
+
+        const alertTSConfig = this.readConfiguration(this.configurations.alertTSConfigChanges, 'always');
 
         if (filename) {
             this.tsconfig = filename;
@@ -166,7 +187,16 @@ class TypeScriptCompiler {
             this.tsconfig = null;
             msg = 'Previous tsconfig.json file at \'' + this.tsconfig + '\' was removed. Building each \'.ts\' file.';
         }
-        window.showInformationMessage(msg, 'Dismiss');
+        if (alertTSConfig === 'always') {
+            window.showInformationMessage(msg, 'Dismiss', 'Never show again')
+                .then(opted => {
+                    if (opted === 'Never show again') {
+                        this.setConfiguration(this.configurations.alertTSConfigChanges, 'never');
+                    }
+                })
+        }
+
+        this.updatesTsConfigBuildOnSaveOptions();
     }
 
     private getNodeModulesBinPath(): Promise<string> {
@@ -228,9 +258,16 @@ class TypeScriptCompiler {
     }
 
     private compile(fspath: string) {
+        var self = this;
+
+        if (!this.tsconfigCompileOnSave) {
+            window.setStatusBarMessage(`tsconfig.json from workspace turned off 'auto compiling on save' feature.`, 5000);
+            self.statusChannel.updateStatus('$(alert) TS [ON]', `TypeScript Auto Compiler can't build on save - see tsconfig.json.`, 'tomato');            
+            return;
+        }
+
         var filename = Path.basename(fspath);
         var ext = Path.extname(filename).toLowerCase();
-        var self = this;
 
         if (ext == '.ts' || filename == 'tsconfig.json') {
             self.statusChannel.updateStatus('$(beaker) TS [ ... ]',
