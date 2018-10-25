@@ -261,7 +261,7 @@ class TypeScriptCompiler {
         var self = this;
 
         if (!this.tsconfigCompileOnSave) {
-            window.setStatusBarMessage(`tsconfig.json from workspace turned off 'auto compiling on save' feature.`, 5000);
+            window.setStatusBarMessage(`tsconfig.json (from workspace) turned off 'compile on save' feature.`, 5000);
             self.statusChannel.updateStatus('$(alert) TS [ON]', `TypeScript Auto Compiler can't build on save - see tsconfig.json.`, 'tomato');            
             return;
         }
