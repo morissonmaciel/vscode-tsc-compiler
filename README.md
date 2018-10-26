@@ -30,9 +30,11 @@ You can download the compiler in [TypeScript Lang Download page](https://www.typ
 Two brand new settings are available.
 
 * vscode.tsc.compiler.alertOnError
+
 Controls when an alert for compiling errors should be display for user. Values: ['always', 'never']
 
 * vscode.tsc.compiler.alertTSConfigChanges
+
 Controls when an alert should be display for user when tsconfig.json file is found/removed from extension watcher. Values: ['always', 'never']
 
 These setting are automactlly changed to `never` when you hit the **Never show again** button from alerts.
