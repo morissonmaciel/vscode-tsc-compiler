@@ -17,13 +17,27 @@ Fill free to report any bugs and features in [GitHub Extension Repository](https
 
 External TypeScript compiler (aka `tsc`) must be installed to work properly.
 
-You can download the compiler in [TypeScript Lang Download page](https://www.typescriptlang.org/index.html#download-links)
+```
+npm install -g typescript
+```
 
-> Note: in Windows, be sure that TypeScript installation folder is set in `PATH` variable.
+> Note: No longer needed a TypeScript installation in Windows. You can use you workspace `node_modules` or global `node_modules` instead.
+
+You can download the compiler in [TypeScript Lang Download page](https://www.typescriptlang.org/index.html#download-links)
 
 ## Extension Settings
 
-No specific settings are necessary to configure the extension.
+Two brand new settings are available.
+
+* vscode.tsc.compiler.alertOnError
+
+Controls when an alert for compiling errors should be display for user. Values: ['always', 'never']
+
+* vscode.tsc.compiler.alertTSConfigChanges
+
+Controls when an alert should be display for user when tsconfig.json file is found/removed from extension watcher. Values: ['always', 'never']
+
+These setting are automactlly changed to `never` when you hit the **Never show again** button from alerts.
 
 ## Known Issues
 
@@ -36,6 +50,16 @@ BETA features available are working properly for common scenarios:
 * Single folder workspace
 * Single `tsconfig.json` file
 * Multiples `.ts` files
+
+### 0.6.5 🌟
+Fall improvements made to extension:
+
+* Extension now honor `tsconfig.json` **compileOnSave** configuration
+* Detecting changes in `tsconfig.json` fires a new alert, which can be disabled in *'Never show again'*
+* Errors in compilation proccess now fires a new alert, which can be disabled in *'Never show again'* or show the **Output** panel with more error details
+* Extenions uses **tsc** compiler in following order: from your `node_modules` dependencies (no need for a full Windows installation); from global `node_modules` path; then from Environment Path (Windows .exe installation).  
+
+Thanks for all 2K extension downloads and 🌟🌟🌟🌟 review in Visual Studio Market Place
 
 ### 0.5.5
 

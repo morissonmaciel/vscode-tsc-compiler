@@ -2,7 +2,7 @@
     "name": "typescript-auto-compiler",
     "displayName": "TypeScript Auto Compiler",
     "description": "TypeScript auto compiler plugin. Watch for changes in .ts and tsconfig.json files and run tsc command to build them. Can use tsconfig.json files for batch build or build single .ts archives.",
-    "version": "0.5.5",
+    "version": "0.6.5",
     "publisher": "morissonmaciel",
     "contributors": [
         "@morissonmaciel",
@@ -22,10 +22,28 @@
         "Other"
     ],
     "main": "./out/extension",
-    "activationEvents" : [
+    "activationEvents": [
         "workspaceContains:**/*.ts",
         "workspaceContains:**/tsconfig.json"
     ],
+    "contributes": {
+        "configuration": {
+            "type": "object",
+            "title": "Typescript Autocompiler Extension configuration",
+            "properties": {
+                "vscode.tsc.compiler.alertOnError": {
+                    "type": "string",
+                    "default": "always",
+                    "description": "Controls when an alert for compiling errors should be display for user. Values: ['always', 'never']"
+                },
+                "vscode.tsc.compiler.alertTSConfigChanges": {
+                    "type": "string",
+                    "default": "always",
+                    "description": "Controls when an alert should be display for user when tsconfig.json file is found/removed from extension watcher. Values: ['always', 'never']"
+                }
+            }
+        }
+    },
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
@@ -34,13 +52,14 @@
         "test": "npm run compile && node ./node_modules/vscode/bin/test"
     },
     "devDependencies": {
-        "typescript": "^2.6.1",
-        "vscode": "^1.1.6",
-        "@types/node": "^7.0.43",
-        "@types/mocha": "^2.2.42"
+        "typescript": "^3.1.3",
+        "vscode": "^1.1.21",
+        "@types/node": "^10.12.0",
+        "@types/mocha": "^5.2.5"
     },
     "repository": {
         "type": "GitHub",
         "url": "https://github.com/morissonmaciel/vscode-tsc-compiler"
-    }
+    },
+    "dependencies": {}
 }
