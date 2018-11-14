@@ -61,5 +61,7 @@
         "type": "GitHub",
         "url": "https://github.com/morissonmaciel/vscode-tsc-compiler"
     },
-    "dependencies": {}
+    "dependencies": {
+        "strip-json-comments": "^2.0.1"
+    }
 }

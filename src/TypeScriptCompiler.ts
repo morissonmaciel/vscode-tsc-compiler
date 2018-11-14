@@ -1,72 +1,50 @@
 import {
-    TaskDefinition,
     window,
-    commands,
-    Disposable,
-    ExtensionContext,
     StatusBarAlignment,
     StatusBarItem,
-    TextDocument,
     workspace,
     OutputChannel,
-    ShellExecution,
-    Task,
-    TaskScope,
-    Terminal,
     FileSystemWatcher,
     RelativePattern,
-    WorkspaceConfiguration,
     ConfigurationTarget
 } from 'vscode';
+import * as stripJsonComments from 'strip-json-comments';
 import * as ChildProcess from 'child_process';
 import * as Path from 'path';
 import * as Fs from 'fs';
 
 class TypeScriptCompilerFileWatcher {
-    private filename: string;
-    private pattern: RelativePattern;
     private watcher: FileSystemWatcher;
     private eventType: string;
+    protected pattern: RelativePattern;
+    protected output: OutputChannel;
+    protected statusChannel: TypeScriptCompilerStatusChannel;
 
-    private constructor() {
+    constructor(output: OutputChannel, statusChannel: TypeScriptCompilerStatusChannel, pattern: RelativePattern) {
+        this.output = output;
+        this.statusChannel = statusChannel;
+        this.pattern = pattern
     }
 
     public watch(fn: Function) {
-        var self = this;
+        this.watcher = workspace.createFileSystemWatcher(this.pattern);
 
-        if (self.filename) self.watcher = workspace.createFileSystemWatcher(self.filename);
-        else if (self.pattern) self.watcher = workspace.createFileSystemWatcher(self.pattern);
-
-        self.watcher.onDidCreate(function (event) {
-            self.eventType = 'created';
-            if (fn) fn({ filename: event.fsPath, eventType: self.eventType });
+        this.watcher.onDidCreate((event) => {
+            this.eventType = 'created';
+            if (fn) fn({ filename: event.fsPath, eventType: this.eventType });
         });
-        self.watcher.onDidChange(function (event) {
-            self.eventType = 'changed';
-            if (fn) fn({ filename: event.fsPath, eventType: self.eventType });
+        this.watcher.onDidChange((event) => {
+            this.eventType = 'changed';
+            if (fn) fn({ filename: event.fsPath, eventType: this.eventType });
         });
-        self.watcher.onDidDelete(function (event) {
-            self.eventType = 'deleted';
-            if (fn) fn({ filename: event.fsPath, eventType: self.eventType });
+        this.watcher.onDidDelete((event) => {
+            this.eventType = 'deleted';
+            if (fn) fn({ filename: event.fsPath, eventType: this.eventType });
         })
     }
 
     public dispose() {
         this.watcher.dispose();
-    }
-
-    public static fromFile(file: string): TypeScriptCompilerFileWatcher {
-        var tfw = new TypeScriptCompilerFileWatcher();
-        tfw.filename = Path.normalize(file);
-
-        return tfw;
-    }
-
-    public static FromPattern(pattern: RelativePattern): TypeScriptCompilerFileWatcher {
-        var tfw = new TypeScriptCompilerFileWatcher();
-        tfw.pattern = pattern;
-
-        return tfw;
     }
 }
 
@@ -89,66 +67,26 @@ class TypeScriptCompilerStatusChannel {
     }
 }
 
-class TypeScriptCompiler {
+class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
 
-    private watchers: { [id: string]: TypeScriptCompilerFileWatcher } = {};
-    private statusChannel: TypeScriptCompilerStatusChannel;
-    private output: OutputChannel;
-    private tsconfig: string;
     private tsconfigCompileOnSave: boolean = true;
+    private childProcesses: Map<string, ChildProcess.ChildProcess> = new Map();
+    private tscPath: string;
+    private tsConfigFile: string;
+
+    constructor(output: OutputChannel, statusChannel: TypeScriptCompilerStatusChannel, tsConfigFile: string) {
+        super(output, statusChannel, new RelativePattern(Path.dirname(tsConfigFile), '**/*.ts'));
+        this.tsConfigFile = tsConfigFile;
+    }
+
     private configurations = {
         alertOnError: 'alertOnError',
         alertTSConfigChanges: 'alertTSConfigChanges'
     }
 
-    public constructor() {
-        var self = this;
-
-        self.statusChannel = new TypeScriptCompilerStatusChannel();
-        self.statusChannel.updateStatus('$(zap) TS [...]', 'TypeScript Auto Compiler - warming up...', 'white');
-
-        if (!self.output) self.output = window.createOutputChannel("TypeScript Auto Compiler");
-
-        workspace.findFiles('**/tsconfig.json').then((files) => {
-            if (!files || files.length == 0) return;
-            self.setTsConfigFile(files[0].fsPath);
-        })
-
-        {
-            let pattern = new RelativePattern(workspace.workspaceFolders[0], '**/*.ts');
-            let watcher = TypeScriptCompilerFileWatcher.FromPattern(pattern);
-            watcher.watch(e => {
-                if (e.filename) self.compile(e.filename)
-            });
-            self.watchers[pattern.pattern] = watcher;
-        }
-
-        {
-            let pattern = new RelativePattern(workspace.workspaceFolders[0], '**/tsconfig.json');
-            let watcher = TypeScriptCompilerFileWatcher.FromPattern(pattern);
-            watcher.watch(e => {
-                if (e.eventType == 'created') self.setTsConfigFile(e.filename);
-                else if (e.eventType == 'deleted') self.setTsConfigFile(null);
-
-                if (e.eventType == 'changed') {
-                    self.updatesTsConfigBuildOnSaveOptions();
-                    self.compile(e.filename);
-                } 
-            });
-            self.watchers[pattern.pattern] = watcher;
-        }
-
-        self.statusChannel.updateStatus('$(eye) TS [ON]',
-            'TypeScript Auto Compiler is ON - Watching file changes.', 'white');
-    }
-
-    public dispose() {
-        this.statusChannel.dispose();
-        this.output.dispose();
-
-        [].forEach.call(this.watchers, watch => {
-            watch.dispose();
-        });
+    public watchProject() {
+        this.readTsConfigFile();
+        this.watch(e => e.filename && this.compile(e.filename));
     }
 
     private readConfiguration(key, defaultValue?: string): string {
@@ -162,31 +100,42 @@ class TypeScriptCompiler {
         return configurationNode.update(key, value, ConfigurationTarget.Workspace);
     }
 
-    private updatesTsConfigBuildOnSaveOptions() {
-        if (this.tsconfig != null) {
-            const contents = Fs.readFileSync(this.tsconfig).toString();
-            const configs = JSON.parse(contents);
-            
-            if (configs && configs.compileOnSave != null) {
-                this.tsconfigCompileOnSave = configs.compileOnSave as boolean;
+    private readTsConfigBuildOnSaveOptions() {
+        const contents = Fs.readFileSync(this.tsConfigFile).toString();
+        let configs = { compileOnSave: false };
+        
+        try {
+            configs = JSON.parse(stripJsonComments(contents));
+        } catch(error) {
+            const showError = this.readConfiguration(this.configurations.alertOnError, 'always');
+            showError === 'always' ?
+                window.showInformationMessage(
+                    `Malformed "tsconfig.json" file.`,
+                    'Dismiss', 'Show output', 'Never show again')
+                    .then(opted => {
+                        if (opted === 'Show output') {
+                            this.output.show();
+                        } else if (opted === 'Never show again') {
+                            this.setConfiguration(this.configurations.alertOnError, 'never');
+                        }
+                    })
+                : console.log(`Not showing error informational message`);
+
+            this.output.appendLine('Failed to parse JSON file: ' + this.tsConfigFile + '. Error: ' + error.message);
+        }
+
+        if (configs && configs.compileOnSave != null && configs.compileOnSave != undefined) {
+            if(configs['include'] instanceof Array) {
+                this.pattern = new RelativePattern(Path.dirname(this.tsConfigFile), configs['include'][0]);
             }
-        } else {
-            this.tsconfigCompileOnSave = true;
+            this.tsconfigCompileOnSave = configs.compileOnSave as boolean;
         }
     }
 
-    private setTsConfigFile(filename?: string) {
-        var msg: string;
-
+    private readTsConfigFile(filename?: string) {
         const alertTSConfig = this.readConfiguration(this.configurations.alertTSConfigChanges, 'always');
+        const msg = 'Found tsconfig.json file at \'' + filename + '\'. File will be used for TypeScript Auto Compile routines.';
 
-        if (filename) {
-            this.tsconfig = filename;
-            msg = 'Found tsconfig.json file at \'' + this.tsconfig + '\'. File will be used for TypeScript Auto Compile routines.';
-        } else {
-            this.tsconfig = null;
-            msg = 'Previous tsconfig.json file at \'' + this.tsconfig + '\' was removed. Building each \'.ts\' file.';
-        }
         if (alertTSConfig === 'always') {
             window.showInformationMessage(msg, 'Dismiss', 'Never show again')
                 .then(opted => {
@@ -196,12 +145,12 @@ class TypeScriptCompiler {
                 })
         }
 
-        this.updatesTsConfigBuildOnSaveOptions();
+        this.readTsConfigBuildOnSaveOptions();
     }
 
     private getNodeModulesBinPath(): Promise<string> {
-        return new Promise((resolve, reject) => {
-            ChildProcess.exec('npm bin', { cwd: workspace.rootPath }, (error, stdout, stderr) => {
+        return new Promise((resolve) => {
+            ChildProcess.exec('npm bin', { cwd: workspace.rootPath }, (error, stdout) => {
                 if (error) resolve('');
                 else resolve(stdout.trim());
             })
@@ -210,8 +159,8 @@ class TypeScriptCompiler {
 
 
     private getNodeModules(): Promise<any> {
-        return new Promise((resolve, reject) => {
-            ChildProcess.exec('npm ls --json', { cwd: workspace.rootPath }, (error, stdout, stderr) => {
+        return new Promise((resolve) => {
+            ChildProcess.exec('npm ls --json', { cwd: workspace.rootPath }, (error, stdout) => {
                 if (error) resolve(null);
                 else resolve(JSON.parse(stdout.trim()));
             })
@@ -219,15 +168,15 @@ class TypeScriptCompiler {
     }
 
     private findSpecificModule(modules: any, name: string): Promise<any> {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             if (!modules) resolve(false);
             else resolve(modules.dependencies != null ? modules.dependencies[name] != null : false);
         })
     }
 
     private testTscPathEnvironment() {
-        return new Promise((resolve, reject) => {
-            ChildProcess.exec('tsc --version', { cwd: workspace.rootPath }, (error, stdout, stderr) => {
+        return new Promise((resolve) => {
+            ChildProcess.exec('tsc --version', { cwd: workspace.rootPath }, (error) => {
                 if (error) resolve(false);
                 else resolve(true);
             })
@@ -235,97 +184,202 @@ class TypeScriptCompiler {
     }
 
     private defineTypescriptCompiler(): Promise<any> {
-        var binPath: string;
+        let binPath: string;
 
         return new Promise((resolve, reject) => {
-            this.getNodeModulesBinPath()
-                .then(path => {
-                    binPath = path;
-                    return this.getNodeModules()
-                })
-                .then(modules => {
-                    return this.findSpecificModule(modules, 'typescript')
-                })
-                .then(exists => {
-                    if (exists) resolve(`${binPath}\\tsc`);
-                    else return this.testTscPathEnvironment()
-                })
-                .then(existsEnv => {
-                    if (!existsEnv) reject(`There is no TypeScript compiler available for this workspace. Try to install via npm install typescript command or download it from https://www.typescriptlang.org/index.html#download-links`)
-                    else resolve('tsc');
-                });
+            if (this.tscPath) {
+                resolve(this.tscPath);
+            } else {
+                this.getNodeModulesBinPath()
+                    .then(path => {
+                        binPath = path;
+                        return this.getNodeModules()
+                    })
+                    .then(modules => {
+                        return this.findSpecificModule(modules, 'typescript')
+                    })
+                    .then(exists => {
+                        if (exists) {
+                            this.tscPath = `${binPath}/tsc`;
+                            resolve(this.tscPath);
+                        } else {
+                            return this.testTscPathEnvironment();
+                        }
+                    })
+                    .then(existsEnv => {
+                        if (!existsEnv) {
+                            reject(`There is no TypeScript compiler available for this workspace. Try to install via npm install typescript command or download it from https://www.typescriptlang.org/index.html#download-links`);
+                        } else {
+                            this.tscPath = 'tsc';
+                            resolve(this.tscPath);
+                        }
+                    });
+            }
         })
     }
 
     private compile(fspath: string) {
-        var self = this;
-
-        if (!this.tsconfigCompileOnSave) {
-            window.setStatusBarMessage(`tsconfig.json (from workspace) turned off 'compile on save' feature.`, 5000);
-            self.statusChannel.updateStatus('$(alert) TS [ON]', `TypeScript Auto Compiler can't build on save - see tsconfig.json.`, 'tomato');            
+        if(!fspath.endsWith('.ts')) {
             return;
         }
 
-        var filename = Path.basename(fspath);
-        var ext = Path.extname(filename).toLowerCase();
+        if (!this.tsconfigCompileOnSave) {
+            window.setStatusBarMessage(`tsconfig.json (from workspace) turned off 'compile on save' feature.`, 5000);
+
+            this.statusChannel.updateStatus('$(alert) TS [ON]', 
+            `TypeScript Auto Compiler can't build on save - see tsconfig.json.`, 'tomato');
+
+            return;
+        }
+
+        const filename = Path.basename(fspath);
+        const ext = Path.extname(filename).toLowerCase();
 
         if (ext == '.ts' || filename == 'tsconfig.json') {
-            self.statusChannel.updateStatus('$(beaker) TS [ ... ]',
-                'TypeScript Auto Compiler is ON - Compiling changes...', 'cyan');
+            const status = "Auto compiling file \'" + filename + "\'";
 
-            var status = "Auto compiling file \'" + filename + "\'";
             window.setStatusBarMessage(status, 5000);
-            self.output.appendLine(status);
 
-            this.defineTypescriptCompiler()
-                .then(tsc => {
-                    console.log(tsc);
-                    var command = `${tsc} ${fspath}`;
+            this.output.appendLine('');
+            this.output.appendLine(status);
 
-                    if (self.tsconfig) {
-                        command = `${tsc} -p \"${self.tsconfig}\"`;
-                        self.output.appendLine("Using tsconfig.json at \'" + self.tsconfig + "\'");
-                    }
+            this.statusChannel.updateStatus('$(beaker) TS [ ... ]', 
+            `TypeScript Auto Compiler is ON - Compiling changes...`, 'cyan');
 
-                    ChildProcess.exec(command, { cwd: workspace.rootPath }, (error, stdout, stderr) => {
-                        self.statusChannel.updateStatus('$(eye) TS [ON]',
-                            'TypeScript Auto Compiler is ON - Watching file changes.', 'white');
+            this.defineTypescriptCompiler().then(tsc => {
+                console.log(tsc);
+                var command = `${tsc} ${fspath}`;
 
-                        if (error) {
-                            // self.output.show();
-                            self.output.appendLine(error.message);
-                            self.output.appendLine(stdout.trim().toString());
-                            self.output.appendLine('');
+                if (this.tsConfigFile) {
+                    command = `${tsc} -p \"${this.tsConfigFile}\"`;
+                    this.output.appendLine("Using tsconfig.json at \'" + this.tsConfigFile + "\'");
+                }
+                
+                if (this.childProcesses.get(filename)) {
+                    this.childProcesses.get(filename).kill('SIGHUP');
+                }
 
-                            const showError = this.readConfiguration(self.configurations.alertOnError, 'always');
+                this.childProcesses.set(filename, ChildProcess.exec(command, { cwd: workspace.rootPath }, (error, stdout, stderr) => {
+                    if (error) {
+                        if (error.signal !== 'SIGHUP') {
+                            // this.output.show();
+                            this.output.appendLine(error.message);
+                            this.output.appendLine(stdout.trim().toString());
+                            this.output.appendLine('');
+
+                            const showError = this.readConfiguration(this.configurations.alertOnError, 'always');
                             showError === 'always' ?
                                 window.showInformationMessage(
                                     `Compile errors ocurred while building .ts files.`,
                                     'Dismiss', 'Show output', 'Never show again')
                                     .then(opted => {
-                                        if (opted === 'Show output') self.output.show();
+                                        if (opted === 'Show output') {
+                                            this.output.show();
+                                        }
                                         else if (opted === 'Never show again') {
-                                            this.setConfiguration(self.configurations.alertOnError, 'never');
+                                            this.setConfiguration(this.configurations.alertOnError, 'never');
                                         }
                                     })
                                 : console.log(`Not showing error informational message`)
 
                             window.setStatusBarMessage(error.message, 5000);
                         } else {
-                            var successMsg = 'TypeScript Auto Compilation succedded.';
-
-                            window.setStatusBarMessage(successMsg, 5000);
-                            self.output.appendLine(successMsg);
-                            self.output.appendLine('');
+                            this.output.appendLine('');
+                            this.output.appendLine('One compilation was canceled as another process started.');
                         }
-                    })
-                })
-                .catch(error => {
-                    self.statusChannel.updateStatus('$(alert) TS [ON]',
-                        'TypeScript Auto Compiler encountered an errror.', 'tomato');
-                    window.showInformationMessage(error, 'Dismiss')
-                })
+                    } else {
+                        var successMsg = 'TypeScript Auto Compilation succedded.';
+
+                        this.output.appendLine('');
+                        this.output.appendLine(successMsg);
+                        this.statusChannel.updateStatus('$(eye) TS [ON]', 
+                        `TypeScript Auto Compiler is ON - Watching file changes.`, 'white');
+
+                        window.setStatusBarMessage(successMsg, 5000);
+                    }
+                
+                    this.childProcesses.delete(filename);
+                }));
+            }).catch(error => {
+                this.statusChannel.updateStatus('$(alert) TS [ON]', 
+                'TypeScript Auto Compiler encountered an errror.', 'tomato');
+                window.showInformationMessage(error, 'Dismiss')
+            })
         }
+    }
+}
+
+class TypeScriptCompiler {
+    private watchers: TypeScriptCompilerFileWatcher[] = [];
+    private output: OutputChannel;
+    private isWatching: boolean = false;
+    private statusChannel: TypeScriptCompilerStatusChannel;
+
+    public watch() {
+        if(!this.isWatching) {
+            this.isWatching = true;
+            this.output = window.createOutputChannel("TypeScript Auto Compiler");
+            this.statusChannel = new TypeScriptCompilerStatusChannel();
+            
+            this.output.appendLine('Looking for "tsconfig.json" files..');
+            this.output.appendLine('');
+
+            this.watchTsConfigFiles();
+            this.watchProjects().then(() => {
+                this.statusChannel.updateStatus('$(eye) TS [ON]',
+                    'TypeScript Auto Compiler is ON - Watching file changes.', 'white');
+                this.output.appendLine('');
+                this.output.appendLine('Watching for file changes..');
+            });
+        }
+    }
+
+    public dispose() {
+        for (const watcher of this.watchers) {
+            watcher.dispose();
+        }
+        this.watchers = [];
+        this.output.dispose();
+        this.statusChannel.dispose();
+        this.isWatching = false;
+    }
+
+    private watchTsConfigFiles() {
+        for (const workspaceFolder of workspace.workspaceFolders) {
+            const pattern = new RelativePattern(workspaceFolder, '**/tsconfig.json');
+            const watcher = new TypeScriptCompilerFileWatcher(this.output, this.statusChannel, pattern);
+
+            this.watchers.push(watcher);
+
+            watcher.watch(() => {
+                this.dispose();
+                this.watch();
+                this.output.appendLine('"tsconfig.json" configuration changed. Reloading plugin..');
+                this.output.appendLine('');
+            });
+        }
+    }
+    private watchProjects() {
+        return this.findFiles().then(files => {
+            for (const file of files) {
+                const projectCompiler = new TypeScriptCompilerProjectWatcher(this.output, this.statusChannel, file);
+
+                this.output.appendLine('Found "tsconfig.json" file: ' + file);
+                this.watchers.push(projectCompiler);
+
+                projectCompiler.watchProject();
+            }
+        }).catch(error => {
+            this.output.appendLine('Failed to start watchers. Error: ' + error.message + '\n' + error.stack);
+        });
+    }
+
+    private findFiles(): Promise<any> {
+        return new Promise(resolve => {
+            workspace.findFiles('**/tsconfig.json').then(files => {
+                resolve(files.map(file => file.path));
+            });
+        });
     }
 }
 

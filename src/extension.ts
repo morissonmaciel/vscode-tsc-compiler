@@ -8,7 +8,9 @@ export function activate(context: ExtensionContext) {
 
     console.log('Congratulations, your extension "typescript-auto-compiler" is now active!');
 
-    let compiler = new TypeScriptCompiler();
+    const compiler = new TypeScriptCompiler();
+    
+    compiler.watch();
 
     // let disposable = commands.registerCommand('extension.sayHello', () => {
     //     window.showInformationMessage('Hello World!');
