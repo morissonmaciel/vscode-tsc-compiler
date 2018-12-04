@@ -6,7 +6,8 @@ import {
     OutputChannel,
     FileSystemWatcher,
     RelativePattern,
-    ConfigurationTarget
+    ConfigurationTarget,
+    Uri
 } from 'vscode';
 import * as stripJsonComments from 'strip-json-comments';
 import * as ChildProcess from 'child_process';
@@ -103,10 +104,12 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
     private readTsConfigBuildOnSaveOptions() {
         const contents = Fs.readFileSync(this.tsConfigFile).toString();
         let configs = { compileOnSave: false };
-        
+
         try {
-            configs = JSON.parse(stripJsonComments(contents));
-        } catch(error) {
+            const stripedContents = stripJsonComments(contents)
+            // while editing a tsconfig.json, parsing JSON for stripedContents can missinterpreted as malformed
+            configs = stripedContents && stripedContents.length > 0 ? JSON.parse(stripJsonComments(contents)) : {}
+        } catch (error) {
             const showError = this.readConfiguration(this.configurations.alertOnError, 'always');
             showError === 'always' ?
                 window.showInformationMessage(
@@ -125,7 +128,7 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
         }
 
         if (configs && configs.compileOnSave != null && configs.compileOnSave != undefined) {
-            if(configs['include'] instanceof Array) {
+            if (configs['include'] instanceof Array) {
                 this.pattern = new RelativePattern(Path.dirname(this.tsConfigFile), configs['include'][0]);
             }
             this.tsconfigCompileOnSave = configs.compileOnSave as boolean;
@@ -133,8 +136,9 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
     }
 
     private readTsConfigFile(filename?: string) {
+        const file = filename || this.tsConfigFile
         const alertTSConfig = this.readConfiguration(this.configurations.alertTSConfigChanges, 'always');
-        const msg = 'Found tsconfig.json file at \'' + filename + '\'. File will be used for TypeScript Auto Compile routines.';
+        const msg = 'Found tsconfig.json file at \'' + file + '\'. File will be used for TypeScript Auto Compile routines.';
 
         if (alertTSConfig === 'always') {
             window.showInformationMessage(msg, 'Dismiss', 'Never show again')
@@ -148,9 +152,9 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
         this.readTsConfigBuildOnSaveOptions();
     }
 
-    private getNodeModulesBinPath(): Promise<string> {
+    private getNodeModulesBinPath(workspaceFolder: string): Promise<string> {
         return new Promise((resolve) => {
-            ChildProcess.exec('npm bin', { cwd: workspace.rootPath }, (error, stdout) => {
+            ChildProcess.exec('npm bin', { cwd: workspaceFolder }, (error, stdout) => {
                 if (error) resolve('');
                 else resolve(stdout.trim());
             })
@@ -158,9 +162,9 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
     }
 
 
-    private getNodeModules(): Promise<any> {
+    private getNodeModules(workspaceFolder: string): Promise<any> {
         return new Promise((resolve) => {
-            ChildProcess.exec('npm ls --json', { cwd: workspace.rootPath }, (error, stdout) => {
+            ChildProcess.exec('npm list -depth 0 --json', { cwd: workspaceFolder }, (error, stdout) => {
                 if (error) resolve(null);
                 else resolve(JSON.parse(stdout.trim()));
             })
@@ -174,9 +178,9 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
         })
     }
 
-    private testTscPathEnvironment() {
+    private testTscPathEnvironment(workspaceDir: string) {
         return new Promise((resolve) => {
-            ChildProcess.exec('tsc --version', { cwd: workspace.rootPath }, (error) => {
+            ChildProcess.exec('tsc --version', { cwd: workspaceDir }, (error) => {
                 if (error) resolve(false);
                 else resolve(true);
             })
@@ -185,25 +189,30 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
 
     private defineTypescriptCompiler(): Promise<any> {
         let binPath: string;
+        // workspace.getWorkspaceFolder is not well implemented for multi-root workspace folders 
+        // and workspace.rootPath will be deprecated - changing to file scan aproach
+        // https://github.com/Microsoft/vscode/issues/28344
+        let wsFolder = workspace.workspaceFolders.filter(folder => folder.uri.fsPath.includes(Path.dirname(this.tsConfigFile))).pop()
+        let wsCandidateFolder = wsFolder ? wsFolder.uri.fsPath : workspace.rootPath;
 
         return new Promise((resolve, reject) => {
             if (this.tscPath) {
                 resolve(this.tscPath);
             } else {
-                this.getNodeModulesBinPath()
+                this.getNodeModulesBinPath(wsCandidateFolder)
                     .then(path => {
                         binPath = path;
-                        return this.getNodeModules()
+                        return this.getNodeModules(wsCandidateFolder)
                     })
                     .then(modules => {
                         return this.findSpecificModule(modules, 'typescript')
                     })
                     .then(exists => {
                         if (exists) {
-                            this.tscPath = `${binPath}/tsc`;
+                            this.tscPath = `${binPath.split(Path.sep).concat(...[`tsc`]).join(Path.sep)}`;
                             resolve(this.tscPath);
                         } else {
-                            return this.testTscPathEnvironment();
+                            return this.testTscPathEnvironment(wsCandidateFolder);
                         }
                     })
                     .then(existsEnv => {
@@ -219,15 +228,15 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
     }
 
     private compile(fspath: string) {
-        if(!fspath.endsWith('.ts')) {
+        if (!fspath.endsWith('.ts')) {
             return;
         }
 
         if (!this.tsconfigCompileOnSave) {
             window.setStatusBarMessage(`tsconfig.json (from workspace) turned off 'compile on save' feature.`, 5000);
 
-            this.statusChannel.updateStatus('$(alert) TS [ON]', 
-            `TypeScript Auto Compiler can't build on save - see tsconfig.json.`, 'tomato');
+            this.statusChannel.updateStatus('$(alert) TS [ON]',
+                `TypeScript Auto Compiler can't build on save - see tsconfig.json.`, 'tomato');
 
             return;
         }
@@ -243,8 +252,8 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
             this.output.appendLine('');
             this.output.appendLine(status);
 
-            this.statusChannel.updateStatus('$(beaker) TS [ ... ]', 
-            `TypeScript Auto Compiler is ON - Compiling changes...`, 'cyan');
+            this.statusChannel.updateStatus('$(beaker) TS [ ... ]',
+                `TypeScript Auto Compiler is ON - Compiling changes...`, 'cyan');
 
             this.defineTypescriptCompiler().then(tsc => {
                 console.log(tsc);
@@ -254,7 +263,7 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
                     command = `${tsc} -p \"${this.tsConfigFile}\"`;
                     this.output.appendLine("Using tsconfig.json at \'" + this.tsConfigFile + "\'");
                 }
-                
+
                 if (this.childProcesses.get(filename)) {
                     this.childProcesses.get(filename).kill('SIGHUP');
                 }
@@ -282,6 +291,8 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
                                     })
                                 : console.log(`Not showing error informational message`)
 
+                            this.statusChannel.updateStatus('$(eye) TS [ON]',
+                                `TypeScript Auto Compiler is ON - Watching file changes.`, 'white');
                             window.setStatusBarMessage(error.message, 5000);
                         } else {
                             this.output.appendLine('');
@@ -292,17 +303,17 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
 
                         this.output.appendLine('');
                         this.output.appendLine(successMsg);
-                        this.statusChannel.updateStatus('$(eye) TS [ON]', 
-                        `TypeScript Auto Compiler is ON - Watching file changes.`, 'white');
+                        this.statusChannel.updateStatus('$(eye) TS [ON]',
+                            `TypeScript Auto Compiler is ON - Watching file changes.`, 'white');
 
                         window.setStatusBarMessage(successMsg, 5000);
                     }
-                
+
                     this.childProcesses.delete(filename);
                 }));
             }).catch(error => {
-                this.statusChannel.updateStatus('$(alert) TS [ON]', 
-                'TypeScript Auto Compiler encountered an errror.', 'tomato');
+                this.statusChannel.updateStatus('$(alert) TS [ON]',
+                    'TypeScript Auto Compiler encountered an errror.', 'tomato');
                 window.showInformationMessage(error, 'Dismiss')
             })
         }
@@ -316,11 +327,11 @@ class TypeScriptCompiler {
     private statusChannel: TypeScriptCompilerStatusChannel;
 
     public watch() {
-        if(!this.isWatching) {
+        if (!this.isWatching) {
             this.isWatching = true;
             this.output = window.createOutputChannel("TypeScript Auto Compiler");
             this.statusChannel = new TypeScriptCompilerStatusChannel();
-            
+
             this.output.appendLine('Looking for "tsconfig.json" files..');
             this.output.appendLine('');
 
@@ -377,7 +388,7 @@ class TypeScriptCompiler {
     private findFiles(): Promise<any> {
         return new Promise(resolve => {
             workspace.findFiles('**/tsconfig.json').then(files => {
-                resolve(files.map(file => file.path));
+                resolve(files.map(file => file.fsPath));
             });
         });
     }
