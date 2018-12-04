@@ -6,8 +6,7 @@ import {
     OutputChannel,
     FileSystemWatcher,
     RelativePattern,
-    ConfigurationTarget,
-    Uri
+    ConfigurationTarget
 } from 'vscode';
 import * as stripJsonComments from 'strip-json-comments';
 import * as ChildProcess from 'child_process';
@@ -187,13 +186,34 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
         })
     }
 
+    private findNodeModulesByFileParentsFolder(fsFile: string): string {
+        var splittedDir = Path.dirname(fsFile).split(Path.sep);
+        var candidateFolder = null
+
+        var i = splittedDir.length;
+        while (i > 0) {
+            var parentDir = splittedDir.slice(0, i).join(Path.sep)
+            parentDir = Path.join(parentDir, `node_modules`)
+
+            if (Fs.existsSync(parentDir)) {
+                candidateFolder = parentDir
+                break;
+            }
+
+            i--;
+        }
+
+        return candidateFolder
+    }
+
     private defineTypescriptCompiler(): Promise<any> {
         let binPath: string;
         // workspace.getWorkspaceFolder is not well implemented for multi-root workspace folders 
         // and workspace.rootPath will be deprecated - changing to file scan aproach
         // https://github.com/Microsoft/vscode/issues/28344
-        let wsFolder = workspace.workspaceFolders.filter(folder => folder.uri.fsPath.includes(Path.dirname(this.tsConfigFile))).pop()
-        let wsCandidateFolder = wsFolder ? wsFolder.uri.fsPath : workspace.rootPath;
+        var wsFolder = workspace.workspaceFolders.filter(folder => folder.uri.fsPath.includes(Path.dirname(this.tsConfigFile))).pop();
+        let wsCandidateFolder = wsFolder ? wsFolder.uri.fsPath :
+            this.findNodeModulesByFileParentsFolder(this.tsConfigFile) || workspace.rootPath;
 
         return new Promise((resolve, reject) => {
             if (this.tscPath) {
