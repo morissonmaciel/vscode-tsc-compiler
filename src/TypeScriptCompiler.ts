@@ -72,7 +72,7 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
     private tsconfigCompileOnSave: boolean = true;
     private childProcesses: Map<string, ChildProcess.ChildProcess> = new Map();
     private tscPath: string;
-    private tsConfigFile: string;
+    public tsConfigFile: string;
 
     constructor(output: OutputChannel, statusChannel: TypeScriptCompilerStatusChannel, tsConfigFile: string) {
         super(output, statusChannel, new RelativePattern(Path.dirname(tsConfigFile), '**/*.ts'));
@@ -87,6 +87,10 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
     public watchProject() {
         this.readTsConfigFile();
         this.watch(e => e.filename && this.compile(e.filename));
+    }
+
+    public reloadTsConfigFile() {
+        this.readTsConfigBuildOnSaveOptions();
     }
 
     private readConfiguration(key, defaultValue?: string): string {
@@ -134,8 +138,8 @@ class TypeScriptCompilerProjectWatcher extends TypeScriptCompilerFileWatcher {
         }
     }
 
-    private readTsConfigFile(filename?: string) {
-        const file = filename || this.tsConfigFile
+    private readTsConfigFile() {
+        const file = this.tsConfigFile;
         const alertTSConfig = this.readConfiguration(this.configurations.alertTSConfigChanges, 'always');
         const msg = 'Found tsconfig.json file at \'' + file + '\'. File will be used for TypeScript Auto Compile routines.';
 
@@ -382,27 +386,65 @@ class TypeScriptCompiler {
 
             this.watchers.push(watcher);
 
-            watcher.watch(() => {
-                this.dispose();
-                this.watch();
-                this.output.appendLine('"tsconfig.json" configuration changed. Reloading plugin..');
-                this.output.appendLine('');
-            });
+            watcher.watch(this.handleTsConfigChange.bind(this));
         }
     }
+
+    private handleTsConfigChange(event: { eventType: string, filename: string }) {
+        this.output.appendLine('');
+
+        switch(event.eventType) {
+            case 'created':
+                this.setupProjectWatcher(event.filename);
+                break;
+            case 'deleted':
+                this.disposeWatcher(this.findProjectWatcher(event.filename));
+                this.output.appendLine('A project "tsconfig.json" file was removed: ' + event.filename);
+                break;
+            case 'changed':
+                const watcher = this.findProjectWatcher(event.filename);
+                if(watcher) {
+                    watcher.reloadTsConfigFile();
+                    this.output.appendLine('A project "tsconfig.json" file was changed: ' + event.filename);
+                }
+                break;
+        }
+    }
+
     private watchProjects() {
         return this.findFiles().then(files => {
             for (const file of files) {
-                const projectCompiler = new TypeScriptCompilerProjectWatcher(this.output, this.statusChannel, file);
-
-                this.output.appendLine('Found "tsconfig.json" file: ' + file);
-                this.watchers.push(projectCompiler);
-
-                projectCompiler.watchProject();
+                this.setupProjectWatcher(file);
             }
         }).catch(error => {
             this.output.appendLine('Failed to start watchers. Error: ' + error.message + '\n' + error.stack);
         });
+    }
+
+    private disposeWatcher(watcher: TypeScriptCompilerFileWatcher) {
+        const index = this.watchers.indexOf(watcher);
+        if(index !== -1) {
+            watcher.dispose();
+            this.watchers.splice(index, 1);
+        }
+    }
+
+    private findProjectWatcher(tsConfigFile: string): TypeScriptCompilerProjectWatcher {
+        for(const watcher of this.watchers) {
+            if(watcher instanceof TypeScriptCompilerProjectWatcher && watcher.tsConfigFile === tsConfigFile) {
+                return watcher;
+            }
+        }
+        return null;
+    }
+
+    private setupProjectWatcher(tsConfigFile: string) {
+        const projectCompiler = new TypeScriptCompilerProjectWatcher(this.output, this.statusChannel, tsConfigFile);
+
+        this.output.appendLine('Found "tsconfig.json" file: ' + tsConfigFile);
+        this.watchers.push(projectCompiler);
+
+        projectCompiler.watchProject();
     }
 
     private findFiles(): Promise<any> {
