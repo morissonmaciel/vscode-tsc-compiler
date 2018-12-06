@@ -8,7 +8,7 @@ Fill free to report any bugs and features in [GitHub Extension Repository](https
 
 # Important Breaking Change 🚨
 
-Due to restrictions realted to the implementation for multi-root workspaces and cross-platform compilation, the extension now needs a proper `tsconfig.json` file to work.
+Due to restrictions realated to the implementation for multi-root workspaces and cross-platform compilation, the extension now needs a proper `tsconfig.json` file to work.
 
 * For single folder/root workspace, just place `tsconfig.json` file inside root folder or any subfolder
 * For multi folder/root workspace, place `tsconfig.json` inside any subfolder for specific root folder automatically changes and build activation
