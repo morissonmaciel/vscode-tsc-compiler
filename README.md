@@ -13,9 +13,13 @@ Due to restrictions realted to the implementation for multi-root workspaces and 
 * For single folder/root workspace, just place `tsconfig.json` file inside root folder or any subfolder
 * For multi folder/root workspace, place `tsconfig.json` inside any subfolder for specific root folder automatically changes and build activation
 
+<img width="1392" alt="captura de tela 2018-12-06 as 16 51 52" src="https://user-images.githubusercontent.com/11509104/49607485-38902880-f97d-11e8-83b0-d1cee7483af6.png">
+
 > Foolder with .ts files and without any proper `tsconfig.json` associated will never be compiled
 
 > Remember to install **tsc** (Typescript Compiler) using `package.json` in each root folder or globally with `npm install -g typescript`
+
+<img width="1392" alt="captura de tela 2018-12-06 as 16 57 54" src="https://user-images.githubusercontent.com/11509104/49607513-5067ac80-f97d-11e8-86e8-2e3838df3411.png">
 
 For intance, you can place this dependency inside `package.json` file 
 ```json
