@@ -6,6 +6,24 @@ This is a TypeScript extension designed to build automatically any opened .ts on
 > Important Note: this extension still is in BETA build and may not work properly in specific scenarios
 Fill free to report any bugs and features in [GitHub Extension Repository](https://github.com/morissonmaciel/vscode-tsc-compiler). 
 
+# Important Breaking Change
+
+Due to restrictions realted to the implementation for multi-root workspaces and cross-platform compilation, the extension now needs a proper `tsconfig.json` file to work.
+
+* For single folder/root workspace, just place `tsconfig.json` file inside root folder or any subfolder
+* For multi folder/root workspace, place `tsconfig.json` inside any folder you need to be scanned for .ts files automatically changes and build 
+
+> Foolder with .ts files and without any proper `tsconfig.json` associated will never be compiled
+> Remember to install tsc (Typescript Compiler) using `package.json` in each root folder or globally with `npm install -g typescript`
+
+```json
+{
+    "devDependencies": {
+        "typescript": "^3.2.1"
+    }
+}
+```
+
 ## Features
 
 * Build automatically `.ts` TypeScripts files changed in editor
