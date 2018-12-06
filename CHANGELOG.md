@@ -1,5 +1,14 @@
 # Change Log
 
+### 0.7.0 👍🏽
+December improvements made to extension:
+
+* Extension now accepts multi-root workspace 
+* Extension honors `tconfig.json`configuration in each folder in multi-root workspace
+* Extension now works properly in UNIX/Mac environment, along Windows platform
+
+ ~ Thanks to [@capricorn86](https://github.com/morissonmaciel/vscode-tsc-compiler/commits?author=capricorn86)!
+ 
 ### 0.6.5 🌟
 Fall improvements made to extension:
 

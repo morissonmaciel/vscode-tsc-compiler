@@ -2,7 +2,7 @@
     "name": "typescript-auto-compiler",
     "displayName": "TypeScript Auto Compiler",
     "description": "TypeScript auto compiler plugin. Watch for changes in .ts and tsconfig.json files and run tsc command to build them. Can use tsconfig.json files for batch build or build single .ts archives.",
-    "version": "0.6.5",
+    "version": "0.7.0",
     "publisher": "morissonmaciel",
     "contributors": [
         "@morissonmaciel",
